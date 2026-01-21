@@ -64,7 +64,7 @@ def format_message(draw, my_numbers, my_stars, matched_numbers, matched_stars, p
 
     # Build message
     lines = [
-        f"🎰 *Euromillions Results - {draw_date}*",
+        f"🎰 *Euromillions Result - {draw_date}*",
         "",
         f"🏆 *Winning combination:*",
         f"   Numbers: {' - '.join(winning_numbers)}",
@@ -89,7 +89,7 @@ def format_message(draw, my_numbers, my_stars, matched_numbers, matched_stars, p
     else:
         lines.extend([
             "",
-            "😢 No prize this time. Better luck next draw!",
+            "😢 No prize this time loosers, you are still poor",
         ])
 
     if matched_numbers == 5 and matched_stars == 2:
@@ -101,6 +101,7 @@ def format_message(draw, my_numbers, my_stars, matched_numbers, matched_stars, p
     if has_jackpot_winner:
         lines.append(f"\nℹ️ This draw had a jackpot winner!")
 
+    lines.extend(["official results: https://www.loteriasyapuestas.es/es/resultados"])
     return "\n".join(lines)
 
 
