@@ -1,0 +1,31 @@
+name: Check Euromillions
+
+on:
+  schedule:
+    # Runs at 21:00 UTC on Tuesday and Friday
+    # This is 22:00 Spanish time in winter (CET), 23:00 in summer (CEST)
+    - cron: '0 21 * * 2,5'
+
+  # Allow manual trigger for testing
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Check Euromillions and notify
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          MY_NUMBERS: ${{ secrets.MY_NUMBERS }}
+          MY_STARS: ${{ secrets.MY_STARS }}
+        run: python check_euromillions.py
