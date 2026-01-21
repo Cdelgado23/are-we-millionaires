@@ -86,22 +86,24 @@ def format_message(draw, my_numbers, my_stars, matched_numbers, matched_stars, p
             f"   Prize: €{prize_amount:,.2f}",
             f"   Winners in this category: {winners}",
         ])
-    else:
-        lines.extend([
-            "",
-            "😢 No prize this time loosers, you are still poor",
-        ])
 
     if matched_numbers == 5 and matched_stars == 2:
         lines.extend([
             "",
             "🎉🎉🎉 *JACKPOT!!! YOU ARE A MILLIONAIRE!!!* 🎉🎉🎉",
         ])
+    else:
+        lines.extend([
+            "",
+            "😢 No millions this time loosers, you are still poor",
+        ])
 
     if has_jackpot_winner:
         lines.append(f"\nℹ️ This draw had a jackpot winner!")
-
-    lines.extend(["official results: https://www.loteriasyapuestas.es/es/resultados"])
+    lines.extend([
+        "❕Do not forget to check the combination for the \"The Million\" additional draw❕", 
+        "Official results: https://www.loteriasyapuestas.es/es/resultados"
+    ])
     return "\n".join(lines)
 
 
