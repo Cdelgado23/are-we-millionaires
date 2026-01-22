@@ -78,15 +78,17 @@ def extract_ticket_data(html_content):
             data["balance"] = balance_match.group(1) + "€"
 
     # Extract numbers (5 main numbers) and stars (2)
-    # They appear in td elements with width:30px
+    # They appear in td elements with width:30px and text-align:center
+    # Use a flexible pattern that handles whitespace and newlines
     number_pattern = re.compile(
-        r'<td[^>]*style="[^"]*width:\s*30px[^"]*text-align:\s*center[^"]*"[^>]*>\s*(\d{2})\s*</td>',
-        re.IGNORECASE
+        r'<td[^>]*style="[^"]*width:\s*30px[^"]*"[^>]*>\s*(\d{2})\s*</td>',
+        re.IGNORECASE | re.DOTALL
     )
 
     # Find position of "+" separator to distinguish numbers from stars
-    plus_pos = html_content.find('>+<')
-    if plus_pos > 0:
+    plus_match = re.search(r'<td[^>]*>\s*\+\s*</td>', html_content, re.IGNORECASE | re.DOTALL)
+    if plus_match:
+        plus_pos = plus_match.start()
         before_plus = html_content[:plus_pos]
         after_plus = html_content[plus_pos:]
 
@@ -95,6 +97,17 @@ def extract_ticket_data(html_content):
 
         data["numbers"] = numbers_before[-5:] if len(numbers_before) >= 5 else numbers_before
         data["stars"] = numbers_after[:2] if len(numbers_after) >= 2 else numbers_after
+
+    # Fallback: try simpler pattern if no numbers found
+    if not data["numbers"]:
+        # Look for 2-digit numbers in td elements within the coupon area
+        simple_pattern = re.compile(r'<td[^>]*>\s*(\d{2})\s*</td>', re.IGNORECASE | re.DOTALL)
+        all_numbers = simple_pattern.findall(html_content)
+        # Filter to likely lottery numbers (01-50 for numbers, 01-12 for stars)
+        lottery_numbers = [n for n in all_numbers if 1 <= int(n) <= 50]
+        if len(lottery_numbers) >= 7:
+            data["numbers"] = lottery_numbers[:5]
+            data["stars"] = lottery_numbers[5:7]
 
     # Extract El Millón code (pattern: 3 letters + 5 digits)
     millon_match = re.search(r'([A-Z]{3}\d{5})', html_content)
@@ -213,7 +226,11 @@ def main():
     print(f"  Numbers: {ticket_data['numbers']}")
     print(f"  Stars: {ticket_data['stars']}")
     print(f"  El Millón code: {ticket_data['millon_code']}")
+    print(f"  El Millón date: {ticket_data['millon_date']}")
+    print(f"  Draw date: {ticket_data['draw_date']}")
+    print(f"  Price: {ticket_data['price']}")
     print(f"  Balance: {ticket_data['balance']}")
+    print(f"  Reference: {ticket_data['reference']}")
 
     # Format message
     message = format_ticket_message(ticket_data)
