@@ -1,4 +1,4 @@
-name: Send Ticket Image
+name: Send Ticket Info
 
 on:
   schedule:
@@ -23,12 +23,7 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install Playwright
-        run: |
-          pip install playwright
-          playwright install chromium
-
-      - name: Send ticket image to Telegram
+      - name: Send ticket info to Telegram
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}

@@ -5,9 +5,8 @@ import json
 import os
 import re
 import urllib.request
-from email.header import decode_header
 
-TELEGRAM_API = "https://api.telegram.org/bot{token}/sendPhoto"
+TELEGRAM_API = "https://api.telegram.org/bot{token}/sendMessage"
 IMAP_SERVER = "imap.gmail.com"
 SENDER_EMAIL = "envios@loteriasyapuestas.es"
 
@@ -55,143 +54,133 @@ def get_email_html(msg):
     raise Exception("No HTML content found in email")
 
 
-def extract_balance(html_content):
-    """Extract the account balance from the email."""
-    # Look for pattern like "tu saldo actual es: 17,50€" or similar
-    match = re.search(r'saldo actual es[:\s]*<[^>]*>\s*([\d,]+)\s*€', html_content, re.IGNORECASE)
-    if match:
-        return match.group(1) + "€"
+def extract_ticket_data(html_content):
+    """Extract all ticket data from the email HTML."""
+    data = {
+        "numbers": [],
+        "stars": [],
+        "millon_code": None,
+        "millon_date": None,
+        "draw_date": None,
+        "price": None,
+        "bet_count": "1",
+        "balance": None,
+        "reference": None,
+    }
 
-    # Alternative pattern
-    match = re.search(r'saldo actual es[:\s]*([\d,]+)\s*€', html_content, re.IGNORECASE)
-    if match:
-        return match.group(1) + "€"
+    # Extract balance
+    balance_match = re.search(r'saldo actual es[:\s]*<[^>]*>\s*([\d,]+)\s*€', html_content, re.IGNORECASE)
+    if balance_match:
+        data["balance"] = balance_match.group(1) + "€"
+    else:
+        balance_match = re.search(r'saldo actual es[:\s]*([\d,]+)\s*€', html_content, re.IGNORECASE)
+        if balance_match:
+            data["balance"] = balance_match.group(1) + "€"
 
-    return None
-
-
-def extract_coupon_html(html_content):
-    """Extract the coupon/ticket section from the email HTML."""
-    # Find the coupon div by its id
-    coupon_match = re.search(r'<div[^>]*id="[^"]*coupon[^"]*"[^>]*>(.*?)</div>\s*</td>', html_content, re.DOTALL | re.IGNORECASE)
-
-    if not coupon_match:
-        # Try alternative pattern - look for the table with the ticket
-        coupon_match = re.search(
-            r'(<td[^>]*background="[^"]*bg-resguardo\.png[^"]*"[^>]*>.*?</td>)',
-            html_content,
-            re.DOTALL | re.IGNORECASE
-        )
-
-    if not coupon_match:
-        raise Exception("Could not find coupon section in email")
-
-    coupon_html = coupon_match.group(1)
-
-    # Wrap in a complete HTML document for rendering
-    full_html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <style>
-            body {{
-                margin: 0;
-                padding: 20px;
-                background-color: #ffffff;
-                font-family: Verdana, Arial, Helvetica, sans-serif;
-            }}
-            table {{
-                border-collapse: collapse;
-            }}
-            img {{
-                max-width: 100%;
-            }}
-        </style>
-    </head>
-    <body>
-        <table border="0" cellpadding="0" cellspacing="0" width="280">
-            <tr>
-                <td background="https://www.loteriasyapuestas.es/f/loterias/imagenes/mailing/bg-resguardo.png"
-                    bgcolor="#fff" valign="top" width="280"
-                    style="background-image: url('https://www.loteriasyapuestas.es/f/loterias/imagenes/mailing/bg-resguardo.png');
-                           background-repeat: no-repeat;
-                           background-size: cover;
-                           padding: 10px;">
-                    {coupon_html}
-                </td>
-            </tr>
-        </table>
-    </body>
-    </html>
-    """
-
-    # Fix image URLs - replace Google proxy URLs with original URLs
-    full_html = re.sub(
-        r'https://ci3\.googleusercontent\.com/meips/[^#]+#([^"]+)',
-        r'\1',
-        full_html
+    # Extract numbers (5 main numbers) and stars (2)
+    # They appear in td elements with width:30px
+    number_pattern = re.compile(
+        r'<td[^>]*style="[^"]*width:\s*30px[^"]*text-align:\s*center[^"]*"[^>]*>\s*(\d{2})\s*</td>',
+        re.IGNORECASE
     )
 
-    return full_html
+    # Find position of "+" separator to distinguish numbers from stars
+    plus_pos = html_content.find('>+<')
+    if plus_pos > 0:
+        before_plus = html_content[:plus_pos]
+        after_plus = html_content[plus_pos:]
+
+        numbers_before = number_pattern.findall(before_plus)
+        numbers_after = number_pattern.findall(after_plus)
+
+        data["numbers"] = numbers_before[-5:] if len(numbers_before) >= 5 else numbers_before
+        data["stars"] = numbers_after[:2] if len(numbers_after) >= 2 else numbers_after
+
+    # Extract El Millón code (pattern: 3 letters + 5 digits)
+    millon_match = re.search(r'([A-Z]{3}\d{5})', html_content)
+    if millon_match:
+        data["millon_code"] = millon_match.group(1)
+
+    # Extract El Millón date (pattern like "23 ENE 26")
+    millon_date_match = re.search(
+        r'game_millon_ticket\.gif.*?<p[^>]*>\s*(\d{1,2}\s+[A-Z]{3}\s+\d{2})\s*</p>',
+        html_content,
+        re.DOTALL | re.IGNORECASE
+    )
+    if millon_date_match:
+        data["millon_date"] = millon_date_match.group(1)
+
+    # Extract draw date (pattern like "23 ENE  2026")
+    draw_date_match = re.search(r'(\d{1,2}\s+[A-Z]{3}\s+\d{4})', html_content)
+    if draw_date_match:
+        data["draw_date"] = draw_date_match.group(1)
+
+    # Extract price
+    price_match = re.search(r'([\d,]+)\s*EUR', html_content)
+    if price_match:
+        data["price"] = price_match.group(1) + " EUR"
+
+    # Extract bet count
+    bet_match = re.search(r'(\d+)\s*apuesta', html_content, re.IGNORECASE)
+    if bet_match:
+        data["bet_count"] = bet_match.group(1)
+
+    # Extract reference number
+    ref_match = re.search(r'(\d{5}-\d{4}-\d{5}-\d{5}-\d{5}-\d{5}-\d{5})', html_content)
+    if ref_match:
+        data["reference"] = ref_match.group(1)
+
+    return data
 
 
-def render_html_to_image(html_content, output_path):
-    """Render HTML to a PNG image using Playwright."""
-    from playwright.sync_api import sync_playwright
+def format_ticket_message(data):
+    """Format the ticket data as a Telegram message."""
+    numbers_str = " - ".join(data["numbers"]) if data["numbers"] else "N/A"
+    stars_str = " - ".join(data["stars"]) if data["stars"] else "N/A"
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page(viewport={"width": 350, "height": 800})
+    lines = [
+        "🎫 *EUROMILLONES - Resguardo*",
+        "━━━━━━━━━━━━━━━━━━━━━━━━",
+        "",
+        "📍 *Tu combinación:*",
+        f"   Números: {numbers_str}",
+        f"   Estrellas: {stars_str}",
+        "",
+        "━━━━━━━━━━━━━━━━━━━━━━━━",
+        "",
+        "🎰 *EL MILLÓN*",
+        f"   Código: {data['millon_code'] or 'N/A'}",
+        f"   Fecha: {data['millon_date'] or 'N/A'}",
+        "",
+        "━━━━━━━━━━━━━━━━━━━━━━━━",
+        "",
+        f"📅 Sorteo: {data['draw_date'] or 'N/A'}",
+        f"💶 Importe: {data['price'] or 'N/A'}",
+        f"🎟️ Apuestas: {data['bet_count']}",
+        "",
+        "━━━━━━━━━━━━━━━━━━━━━━━━",
+        "",
+        f"💰 *Saldo disponible:* {data['balance'] or 'N/A'}",
+        "",
+        f"🔖 Ref: {data['reference'] or 'N/A'}",
+    ]
 
-        page.set_content(html_content)
-        page.wait_for_load_state("networkidle")
-
-        # Get the actual content height
-        content_height = page.evaluate("document.body.scrollHeight")
-        page.set_viewport_size({"width": 350, "height": content_height + 40})
-
-        page.screenshot(path=output_path, full_page=True)
-        browser.close()
+    return "\n".join(lines)
 
 
-def send_telegram_photo(token, chat_id, image_path, caption):
-    """Send a photo via Telegram Bot API."""
+def send_telegram_message(token, chat_id, message):
+    """Send a message via Telegram Bot API."""
     url = TELEGRAM_API.format(token=token)
+    data = json.dumps({
+        "chat_id": chat_id,
+        "text": message,
+        "parse_mode": "Markdown"
+    }).encode("utf-8")
 
-    # Read the image file
-    with open(image_path, "rb") as f:
-        image_data = f.read()
-
-    # Create multipart form data
-    boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW"
-
-    body = (
-        f"--{boundary}\r\n"
-        f'Content-Disposition: form-data; name="chat_id"\r\n\r\n'
-        f"{chat_id}\r\n"
-        f"--{boundary}\r\n"
-        f'Content-Disposition: form-data; name="caption"\r\n\r\n'
-        f"{caption}\r\n"
-        f"--{boundary}\r\n"
-        f'Content-Disposition: form-data; name="parse_mode"\r\n\r\n'
-        f"Markdown\r\n"
-        f"--{boundary}\r\n"
-        f'Content-Disposition: form-data; name="photo"; filename="ticket.png"\r\n'
-        f"Content-Type: image/png\r\n\r\n"
-    ).encode("utf-8")
-
-    body += image_data
-    body += f"\r\n--{boundary}--\r\n".encode("utf-8")
-
-    req = urllib.request.Request(
-        url,
-        data=body,
-        headers={
-            "Content-Type": f"multipart/form-data; boundary={boundary}",
-            "User-Agent": "Mozilla/5.0"
-        }
-    )
+    req = urllib.request.Request(url, data=data, headers={
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0"
+    })
 
     with urllib.request.urlopen(req, timeout=30) as response:
         return json.loads(response.read().decode())
@@ -218,32 +207,24 @@ def main():
     print("Extracting email content...")
     html_content = get_email_html(msg)
 
-    # Extract balance
-    balance = extract_balance(html_content)
-    print(f"Account balance: {balance}")
+    # Extract ticket data
+    print("Extracting ticket data...")
+    ticket_data = extract_ticket_data(html_content)
+    print(f"  Numbers: {ticket_data['numbers']}")
+    print(f"  Stars: {ticket_data['stars']}")
+    print(f"  El Millón code: {ticket_data['millon_code']}")
+    print(f"  Balance: {ticket_data['balance']}")
 
-    # Extract and render coupon
-    print("Extracting coupon section...")
-    coupon_html = extract_coupon_html(html_content)
+    # Format message
+    message = format_ticket_message(ticket_data)
 
-    print("Rendering ticket image...")
-    image_path = "/tmp/ticket.png"
-    render_html_to_image(coupon_html, image_path)
-
-    # Build caption
-    caption_lines = ["🎫 *Tu resguardo de Euromillones*"]
-    if balance:
-        caption_lines.append(f"\n💰 *Saldo disponible:* {balance}")
-    caption_lines.append("\n¡Buena suerte en el sorteo!")
-    caption = "\n".join(caption_lines)
-
-    print("Sending to Telegram...")
-    result = send_telegram_photo(telegram_token, chat_id, image_path, caption)
+    print("\nSending to Telegram...")
+    result = send_telegram_message(telegram_token, chat_id, message)
 
     if result.get("ok"):
-        print("Photo sent successfully!")
+        print("Message sent successfully!")
     else:
-        print(f"Failed to send photo: {result}")
+        print(f"Failed to send message: {result}")
         exit(1)
 
     mail.logout()
