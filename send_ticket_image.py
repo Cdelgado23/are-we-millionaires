@@ -114,17 +114,20 @@ def extract_ticket_data(html_content):
     if millon_match:
         data["millon_code"] = millon_match.group(1)
 
-    # Extract El Millón date (pattern like "23 ENE 26")
+    # Extract El Millón date (pattern like "23 ENE 26" or "27 ENE 26 - 30 ENE 26")
     millon_date_match = re.search(
-        r'game_millon_ticket\.gif.*?<p[^>]*>\s*(\d{1,2}\s+[A-Z]{3}\s+\d{2})\s*</p>',
+        r'game_millon_ticket\.gif.*?<p[^>]*>\s*(\d{1,2}\s+[A-Z]{3}\s+\d{2}(?:\s*-\s*\d{1,2}\s+[A-Z]{3}\s+\d{2})?)\s*</p>',
         html_content,
         re.DOTALL | re.IGNORECASE
     )
     if millon_date_match:
         data["millon_date"] = millon_date_match.group(1)
 
-    # Extract draw date (pattern like "23 ENE  2026")
-    draw_date_match = re.search(r'(\d{1,2}\s+[A-Z]{3}\s+\d{4})', html_content)
+    # Extract draw date (pattern like "23 ENE 2026" or "27 ENE 2026 - 30 ENE 2026")
+    draw_date_match = re.search(
+        r'(\d{1,2}\s+[A-Z]{3}\s+\d{4}(?:\s*-\s*\d{1,2}\s+[A-Z]{3}\s+\d{4})?)',
+        html_content
+    )
     if draw_date_match:
         data["draw_date"] = draw_date_match.group(1)
 
@@ -151,6 +154,13 @@ def format_ticket_message(data):
     numbers_str = " - ".join(data["numbers"]) if data["numbers"] else "N/A"
     stars_str = " - ".join(data["stars"]) if data["stars"] else "N/A"
 
+    # Check if it's a multi-draw ticket
+    draw_date = data['draw_date'] or 'N/A'
+    millon_date = data['millon_date'] or 'N/A'
+
+    # Use "Sorteos" (plural) if it's a date range
+    sorteo_label = "Sorteos" if " - " in draw_date else "Sorteo"
+
     lines = [
         "🎫 *EUROMILLONES - Resguardo*",
         "━━━━━━━━━━━━━━━━━━━━━━━━",
@@ -163,11 +173,11 @@ def format_ticket_message(data):
         "",
         "🎰 *EL MILLÓN*",
         f"   Código: {data['millon_code'] or 'N/A'}",
-        f"   Fecha: {data['millon_date'] or 'N/A'}",
+        f"   Fecha: {millon_date}",
         "",
         "━━━━━━━━━━━━━━━━━━━━━━━━",
         "",
-        f"📅 Sorteo: {data['draw_date'] or 'N/A'}",
+        f"📅 {sorteo_label}: {draw_date}",
         f"💶 Importe: {data['price'] or 'N/A'}",
         f"🎟️ Apuestas: {data['bet_count']}",
         "",
