@@ -4,7 +4,7 @@ on:
   schedule:
     # Runs at 21:00 UTC on Tuesday and Friday
     # This is 22:00 Spanish time in winter (CET), 23:00 in summer (CEST)
-    - cron: '0 21 * * 2,5'
+    - cron: '0 10 * * 3,6'
 
   # Allow manual trigger for testing
   workflow_dispatch:
