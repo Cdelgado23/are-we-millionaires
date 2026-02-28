@@ -2,21 +2,33 @@
 import json
 import os
 import urllib.request
-from datetime import datetime
 
-EUROMILLIONS_API = "https://euromillions.api.pedromealha.dev/v1/draws"
+EUROMILLIONS_API = "https://api.loteriasapi.com/api/v1/results/euromillones/latest"
 TELEGRAM_API = "https://api.telegram.org/bot{token}/sendMessage"
 
 
-def fetch_latest_draw():
+def fetch_latest_draw(api_key):
     """Fetch the most recent Euromillions draw from the API."""
-    req = urllib.request.Request(EUROMILLIONS_API, headers={"User-Agent": "Mozilla/5.0"})
+    req = urllib.request.Request(EUROMILLIONS_API, headers={
+        "User-Agent": "Mozilla/5.0",
+        "X-API-Key": api_key,
+    })
     with urllib.request.urlopen(req, timeout=30) as response:
-        draws = json.loads(response.read().decode())
+        result = json.loads(response.read().decode())
 
-    # Sort by date descending and get the latest
-    draws_sorted = sorted(draws, key=lambda x: x["date"], reverse=True)
-    return draws_sorted[0]
+    data = result["data"]
+    stars_set = set(data["resultData"]["estrellas"])
+    stars = [str(s) for s in data["resultData"]["estrellas"]]
+    numbers = [str(n) for n in data["combination"] if n not in stars_set]
+
+    return {
+        "date": data["drawDate"],
+        "numbers": numbers,
+        "stars": stars,
+        "prizes": data.get("prizes", []),
+        "has_winner": False,
+        "millon": data["resultData"]["millon"]["combinacion"],
+    }
 
 
 def calculate_matches(my_numbers, my_stars, winning_numbers, winning_stars):
@@ -46,6 +58,7 @@ def format_message(draw, my_numbers, my_stars, matched_numbers, matched_stars, p
     winning_stars = draw["stars"]
     draw_date = draw["date"]
     has_jackpot_winner = draw.get("has_winner", False)
+    millon = draw.get("millon", "")
 
     # Create visual representation of matches
     my_nums_display = []
@@ -98,12 +111,14 @@ def format_message(draw, my_numbers, my_stars, matched_numbers, matched_stars, p
             "😢 No millions this time loosers, you are still poor",
         ])
 
+    if millon:
+        lines.extend([
+            "",
+            f"🎟️ *El Millón:* `{millon}`",
+        ])
     if has_jackpot_winner:
         lines.append(f"\nℹ️ This draw had a jackpot winner!")
-    lines.extend([
-        "❕Do not forget to check the combination for the \"The Million\" additional draw❕", 
-        "Official results: https://www.loteriasyapuestas.es/es/resultados"
-    ])
+    lines.append("Official results: https://www.loteriasyapuestas.es/es/resultados")
     return "\n".join(lines)
 
 
@@ -131,10 +146,11 @@ def main():
     chat_id = os.environ.get("TELEGRAM_CHAT_ID")
     my_numbers_str = os.environ.get("MY_NUMBERS", "")
     my_stars_str = os.environ.get("MY_STARS", "")
+    loteriasapi_key = os.environ.get("LOTERIASAPI_KEY")
 
-    if not all([telegram_token, chat_id, my_numbers_str, my_stars_str]):
+    if not all([telegram_token, chat_id, my_numbers_str, my_stars_str, loteriasapi_key]):
         print("Error: Missing required environment variables")
-        print("Required: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, MY_NUMBERS, MY_STARS")
+        print("Required: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, MY_NUMBERS, MY_STARS, LOTERIASAPI_KEY")
         exit(1)
 
     # Parse numbers (handle both "1,2,3" and "01,02,03" formats)
@@ -153,7 +169,7 @@ def main():
     print(f"Your stars: {my_stars}")
 
     # Fetch latest draw
-    draw = fetch_latest_draw()
+    draw = fetch_latest_draw(loteriasapi_key)
     print(f"Latest draw date: {draw['date']}")
     print(f"Winning numbers: {draw['numbers']}")
     print(f"Winning stars: {draw['stars']}")

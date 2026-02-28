@@ -28,4 +28,5 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           MY_NUMBERS: ${{ secrets.MY_NUMBERS }}
           MY_STARS: ${{ secrets.MY_STARS }}
+          LOTERIASAPI_KEY: ${{ secrets.LOTERIASAPI_KEY }}
         run: python check_euromillions.py
