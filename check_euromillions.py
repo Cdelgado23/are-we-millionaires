@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import os
+import re
 import urllib.request
 
 EUROMILLIONS_API = "https://api.loteriasapi.com/api/v1/results/euromillones/latest"
@@ -17,9 +18,9 @@ def fetch_latest_draw(api_key):
         result = json.loads(response.read().decode())
 
     data = result["data"]
-    stars_set = set(data["resultData"]["estrellas"])
+    combination = data["combination"]
+    numbers = [str(n) for n in combination[:5]]
     stars = [str(s) for s in data["resultData"]["estrellas"]]
-    numbers = [str(n) for n in data["combination"] if n not in stars_set]
 
     return {
         "date": data["drawDate"],
@@ -45,10 +46,17 @@ def calculate_matches(my_numbers, my_stars, winning_numbers, winning_stars):
 
 
 def find_prize(prizes, matched_numbers, matched_stars):
-    """Find the prize amount for the given matches."""
+    """Find the prize amount for the given matches.
+
+    Prize categories come from the API as e.g. {"categoryName": "2ª 5 + 1",
+    "winners": 2, "prizeAmount": "21236236"} where prizeAmount is in cents.
+    """
     for prize in prizes:
-        if prize["matched_numbers"] == matched_numbers and prize["matched_stars"] == matched_stars:
-            return prize["prize"], prize["winners"]
+        m = re.search(r"(\d+)\s*\+\s*(\d+)", prize.get("categoryName", ""))
+        if not m:
+            continue
+        if int(m.group(1)) == matched_numbers and int(m.group(2)) == matched_stars:
+            return int(prize["prizeAmount"]) / 100, prize["winners"]
     return 0, 0
 
 
