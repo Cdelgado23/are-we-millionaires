@@ -1,0 +1,49 @@
+name: Check Oposiciones News
+
+on:
+  schedule:
+    # Runs every 5 minutes
+    - cron: '*/5 * * * *'
+
+  # Allow manual trigger for testing
+  workflow_dispatch:
+
+# Needed to commit the updated state file back to the repo
+permissions:
+  contents: write
+
+# Prevent overlapping runs from racing on the state commit
+concurrency:
+  group: check-noticias
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Check news and notify
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          NOTICIAS_TELEGRAM_CHAT_ID: ${{ secrets.NOTICIAS_TELEGRAM_CHAT_ID }}
+        run: python check_noticias.py
+
+      - name: Commit updated state
+        run: |
+          if [[ -n "$(git status --porcelain noticias_state.json)" ]]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add noticias_state.json
+            git commit -m "Update oposiciones news state"
+            git push
+          else
+            echo "No state change to commit."
+          fi
