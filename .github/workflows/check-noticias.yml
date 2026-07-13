@@ -8,6 +8,10 @@ on:
   # Allow manual trigger for testing
   workflow_dispatch:
 
+  # External scheduler (e.g. cron-job.org) hits the dispatches API for punctual runs
+  repository_dispatch:
+    types: [check-noticias]
+
 # Needed to commit the updated state file back to the repo
 permissions:
   contents: write
